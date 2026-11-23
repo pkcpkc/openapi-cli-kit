@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "paths": {
+      "openapi-cli-kit": ["./src/index.ts"]
+    }
+  },
+  "include": ["src", "library", "scripts", "tests", "vitest.config.ts"]
+}

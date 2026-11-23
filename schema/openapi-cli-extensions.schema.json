@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gist.github.com/openapi-cli-spec/v0.1/extensions.schema.json",
+  "title": "OpenAPI 3.1 CLI Vendor Extensions (x-cli-*)",
+  "description": "Standardized x-cli-* extension fields for describing CLI binaries, subcommands, pipes, and exit codes inside valid OpenAPI 3.1 documents.",
+  "type": "object",
+  "properties": {
+    "x-cli": {
+      "type": "object",
+      "description": "Root-level CLI metadata placed at the top level of the OpenAPI document.",
+      "required": ["binary"],
+      "properties": {
+        "binary": { "type": "string", "description": "Executable name on PATH (e.g. 'logscan')." },
+        "min_version": { "type": "string" },
+        "examples": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Copy-pasteable shell pipeline examples."
+        }
+      }
+    },
+    "x-cli-position": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based index for positional arguments (used on parameters with in: 'path')."
+    },
+    "x-cli-short": {
+      "type": "string",
+      "pattern": "^-[a-zA-Z0-9]$",
+      "description": "Optional single-dash shorthand flag (e.g. '-n' for '--lines')."
+    },
+    "x-cli-when-flag": {
+      "type": "string",
+      "description": "Flag required to trigger this structured stdout format (e.g. '--json')."
+    },
+    "x-cli-exit-code": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "Process exit code corresponding to this OpenAPI response object."
+    },
+    "x-cli-stream": {
+      "type": "string",
+      "enum": ["stdout", "stderr"],
+      "default": "stdout",
+      "description": "Target file descriptor for the response payload."
+    }
+  }
+}

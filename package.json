@@ -1,0 +1,65 @@
+{
+  "name": "openapi-cli-kit",
+  "version": "0.1.0",
+  "description": "Describe a CLI as an OpenAPI 3.1 document with x-cli-* extensions: one runner parses arguments, prints help and maps outcomes to exit codes. Ships a library of ready-made CLIs (ImageMagick first) with agent skills.",
+  "license": "MIT",
+  "author": "Paul Hackenberger",
+  "type": "module",
+  "keywords": [
+    "openapi",
+    "cli",
+    "x-cli",
+    "agents",
+    "agent-skills",
+    "imagemagick",
+    "command-line"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "bin": {
+    "ocli": "bin/ocli.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js",
+      "default": "./dist/src/index.js"
+    },
+    "./schema.json": "./schema/openapi-cli-extensions.schema.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "library",
+    "schema",
+    "skills",
+    "specs",
+    "SPEC.md"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "specs": "tsx scripts/specs.ts",
+    "new-item": "tsx scripts/scaffold.ts",
+    "check": "npm run typecheck && npm run build && npm test",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run check"
+  },
+  "peerDependencies": {
+    "tsx": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "tsx": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "tsx": "^4.19.3",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

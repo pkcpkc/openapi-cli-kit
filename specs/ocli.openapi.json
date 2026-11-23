@@ -1,0 +1,499 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ocli",
+    "version": "0.1.0",
+    "summary": "Add ready-made CLIs from the library to a project, and check CLI documents.",
+    "description": "The library holds ready-made CLIs, each an OpenAPI 3.1 document with x-cli-* extensions, its handlers and an\nagent skill. add copies one into your project: you own the code and may change it. lint checks a CLI document against\nthe conventions (SPEC.md) and the extension schema; reference writes the command reference of a skill from one."
+  },
+  "x-cli": {
+    "binary": "ocli",
+    "examples": [
+      "ocli list",
+      "ocli add magick",
+      "ocli add magick --as img --dir tools --skills-dir .claude/skills --json",
+      "ocli lint cli/img/img.openapi.json",
+      "ocli reference cli/img/img.openapi.json > .agents/skills/img/references/commands.md"
+    ]
+  },
+  "paths": {
+    "/list": {
+      "get": {
+        "operationId": "list",
+        "summary": "The CLIs of the library",
+        "parameters": [
+          {
+            "name": "--json",
+            "in": "query",
+            "description": "Print the result as JSON (errors too, on stderr)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The library items",
+            "x-cli-exit-code": 0,
+            "x-cli-stream": "stdout",
+            "x-cli-when-flag": "--json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Item"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Usage"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/add/{item}": {
+      "post": {
+        "operationId": "add",
+        "summary": "Copy a library CLI into this project: its code, its spec, a launcher and its skill",
+        "description": "Writes <dir>/<binary>/ (the source files, <binary>.openapi.json and bin.mjs) and <skills-dir>/<binary>/ (SKILL.md and\nreferences/commands.md), and adds the launcher to package.json bin. The code imports openapi-cli-kit, and the launcher\nruns TypeScript with tsx: install both. Refused (exit 3) when something is there already, unless --force.",
+        "parameters": [
+          {
+            "name": "item",
+            "in": "path",
+            "required": true,
+            "description": "The library item (ocli list)",
+            "schema": {
+              "type": "string"
+            },
+            "x-cli-position": 0
+          },
+          {
+            "name": "--as",
+            "in": "query",
+            "description": "Another binary name for it (every mention renamed)",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9-]*$"
+            }
+          },
+          {
+            "name": "--dir",
+            "in": "query",
+            "description": "The folder for the code, one folder per CLI",
+            "schema": {
+              "type": "string",
+              "default": "cli"
+            },
+            "x-cli-short": "-d"
+          },
+          {
+            "name": "--skills-dir",
+            "in": "query",
+            "description": "The folder of the agent skills",
+            "schema": {
+              "type": "string",
+              "default": ".agents/skills"
+            }
+          },
+          {
+            "name": "--force",
+            "in": "query",
+            "description": "Overwrite what is there",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "x-cli-short": "-f"
+          },
+          {
+            "name": "--no-package",
+            "in": "query",
+            "description": "Leave package.json as it is",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "--json",
+            "in": "query",
+            "description": "Print the result as JSON (errors too, on stderr)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What was written and what is left to do",
+            "x-cli-exit-code": 0,
+            "x-cli-stream": "stdout",
+            "x-cli-when-flag": "--json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Added"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Usage"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/lint/{spec}": {
+      "get": {
+        "operationId": "lint",
+        "summary": "Check a CLI document against the conventions and the extension schema",
+        "parameters": [
+          {
+            "name": "spec",
+            "in": "path",
+            "required": true,
+            "description": "The <binary>.openapi.json file",
+            "schema": {
+              "type": "string",
+              "format": "path"
+            },
+            "x-cli-position": 0
+          },
+          {
+            "name": "--json",
+            "in": "query",
+            "description": "Print the result as JSON (errors too, on stderr)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The document is fine",
+            "x-cli-exit-code": 0,
+            "x-cli-stream": "stdout",
+            "x-cli-when-flag": "--json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Usage"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    },
+    "/reference/{spec}": {
+      "get": {
+        "operationId": "reference",
+        "summary": "A CLI document's commands as markdown (a skill's references/commands.md)",
+        "parameters": [
+          {
+            "name": "spec",
+            "in": "path",
+            "required": true,
+            "description": "The <binary>.openapi.json file",
+            "schema": {
+              "type": "string",
+              "format": "path"
+            },
+            "x-cli-position": 0
+          },
+          {
+            "name": "--json",
+            "in": "query",
+            "description": "Print the result as JSON (errors too, on stderr)",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The markdown",
+            "x-cli-exit-code": 0,
+            "x-cli-stream": "stdout",
+            "x-cli-when-flag": "--json",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Usage"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "error",
+          "status"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What went wrong"
+          },
+          "status": {
+            "type": "integer",
+            "description": "The HTTP-style status: 400, 404, 409, 500, 503 or 504"
+          },
+          "hint": {
+            "type": "string",
+            "description": "What to do next"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "description": "The tasks still running (504) or failed (500)"
+          }
+        }
+      },
+      "Task": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "done",
+              "failed",
+              "aborted"
+            ]
+          },
+          "statusText": {
+            "type": "string"
+          },
+          "progress": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "0-1 while it runs and reports it"
+          }
+        }
+      },
+      "Queued": {
+        "type": "object",
+        "required": [
+          "tasks"
+        ],
+        "properties": {
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            }
+          }
+        }
+      },
+      "Item": {
+        "type": "object",
+        "required": [
+          "name",
+          "binary",
+          "summary"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What to add it by"
+          },
+          "binary": {
+            "type": "string",
+            "description": "Its binary, unless renamed with --as"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tools it runs, to be installed on the machine"
+          }
+        }
+      },
+      "Added": {
+        "type": "object",
+        "required": [
+          "item",
+          "binary",
+          "files",
+          "next"
+        ],
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "binary": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The files written"
+          },
+          "bin": {
+            "type": "string",
+            "description": "The launcher, as added to package.json bin"
+          },
+          "next": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What is left to do"
+          }
+        }
+      }
+    },
+    "responses": {
+      "Accepted": {
+        "description": "Queued (--no-wait): the tasks keep running in the background",
+        "x-cli-exit-code": 0,
+        "x-cli-stream": "stdout",
+        "x-cli-when-flag": "--json",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Queued"
+            }
+          }
+        }
+      },
+      "Usage": {
+        "description": "Usage error: a missing or invalid argument, flag or stdin",
+        "x-cli-exit-code": 1,
+        "x-cli-stream": "stderr",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Not found: what the arguments name does not exist",
+        "x-cli-exit-code": 2,
+        "x-cli-stream": "stderr",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflict: something holds it, or it is still in use (the hint says what to do)",
+        "x-cli-exit-code": 3,
+        "x-cli-stream": "stderr",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Unavailable: a service or tool it needs is not running or not installed",
+        "x-cli-exit-code": 4,
+        "x-cli-stream": "stderr",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Failed": {
+        "description": "Failed: the task or the tool it runs failed",
+        "x-cli-exit-code": 5,
+        "x-cli-stream": "stderr",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Timeout": {
+        "description": "Timed out: --timeout ran out; queued tasks keep running",
+        "x-cli-exit-code": 124,
+        "x-cli-stream": "stderr",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}

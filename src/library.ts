@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CliError } from './runner/errors.ts';
 import { buildSpec, type CliDef } from './dsl.ts';
-import { specText } from './project.ts';
+import { profileArtifacts, profileIndexText, specText } from './project.ts';
 import { referenceText } from './reference.ts';
 import { ITEMS } from '../library/index.ts';
 
@@ -22,8 +22,8 @@ export interface LibraryItem {
   def: CliDef;
   /** Its source files in `library/<name>/`, copied as they are (the binary renamed). */
   files: string[];
-  /** Tools it runs that must be on the machine. */
-  requires: { command: string; install: string }[];
+  /** Tools it runs that must be on the machine; `macApp` and `envVar` can satisfy the requirement when command is absent. */
+  requires: { command: string; install: string; macApp?: string; envVar?: string }[];
 }
 
 export const LIBRARY: LibraryItem[] = ITEMS;
@@ -67,11 +67,46 @@ export interface AddResult {
 const BINARY = /^[a-z][a-z0-9-]*$/;
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+interface PackageManifest {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  bin?: string | Record<string, string>;
+  [key: string]: unknown;
+}
+
 /** Whether a command runs here (on the PATH). */
 function onPath(command: string): boolean {
   try {
     execFileSync(process.platform === 'win32' ? 'where' : 'which', [command], { stdio: 'ignore' });
     return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a macOS application bundle is installed in /Applications or ~/Applications. */
+export function macAppInstalled(app: string, platform = process.platform, home = process.env.HOME ?? ''): boolean {
+  if (platform !== 'darwin') return false;
+  const base = app.replace(/\.app$/i, '').toLowerCase();
+  for (const directory of ['/Applications', path.join(home, 'Applications')]) {
+    let names: string[];
+    try {
+      names = fs.readdirSync(directory);
+    } catch {
+      continue;
+    }
+    if (names.some((name) => {
+      const lower = name.toLowerCase();
+      return lower === `${base}.app` || (lower.endsWith('.app') && (lower.startsWith(`${base} `) || lower.startsWith(`${base}-`)));
+    })) return true;
+  }
+  return false;
+}
+
+function isExecutable(file: string): boolean {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+    return fs.statSync(file).isFile();
   } catch {
     return false;
   }
@@ -88,9 +123,9 @@ await runProcess(new URL('./${binary}.openapi.json', import.meta.url), handlers(
 `;
 
 /**
- * Adds a library CLI to a project: its code to `<dir>/<binary>/` (the source files, its spec `<binary>.openapi.json`
- * and a launcher `bin.mjs`), its skill to `<skillsDir>/<binary>/` (`SKILL.md` and `references/commands.md`), and the
- * launcher to package.json's `bin`. With `as`, every mention of its binary is renamed.
+ * Adds a library CLI to a project: its code to `<dir>/<binary>/` (the source files, its full and focused OpenAPI specs,
+ * and a launcher `bin.mjs`), its skill to `<skillsDir>/<binary>/` (`SKILL.md` and generated command/profile references),
+ * and the launcher to package.json's `bin`. With `as`, every mention of its binary is renamed.
  */
 export function addItem(name: string, options: AddOptions): AddResult {
   const item = findItem(name);
@@ -118,12 +153,25 @@ export function addItem(name: string, options: AddOptions): AddResult {
   put(path.join(codeDir, 'bin.mjs'), launcher(binary, item.name), 0o755);
   put(path.join(skillDir, 'SKILL.md'), rename(fs.readFileSync(path.join(source, 'SKILL.md'), 'utf8')));
   put(path.join(skillDir, 'references', 'commands.md'), referenceText(buildSpec(def), path.relative(options.cwd, specFile)));
+  for (const profile of profileArtifacts(def)) {
+    const profileFileName = profile.specFileName.replace(def.binary, binary);
+    const profileFile = path.join(codeDir, profileFileName);
+    put(profileFile, profile.spec);
+    put(path.join(skillDir, 'references', 'profiles', `${profile.name}.openapi.json`), profile.spec);
+    put(
+      path.join(skillDir, 'references', 'profiles', `${profile.name}.commands.md`),
+      profile.reference.replace(def.binary, binary),
+    );
+  }
+  if (Object.keys(def.profiles ?? {}).length) {
+    put(path.join(skillDir, 'references', 'profiles.md'), profileIndexText(def));
+  }
 
   const next: string[] = [];
   const pkgFile = path.join(options.cwd, 'package.json');
   let bin: string | undefined;
   if (fs.existsSync(pkgFile)) {
-    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8')) as Record<string, any>;
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8')) as PackageManifest;
     const deps = { ...pkg.dependencies, ...pkg.devDependencies };
     const missing = ['openapi-cli-kit', 'tsx'].filter((d) => !deps[d]);
     if (missing.length) next.push(`npm install ${missing.join(' ')}`);
@@ -134,6 +182,10 @@ export function addItem(name: string, options: AddOptions): AddResult {
       next.push(`npm link (puts ${binary} on the PATH)`);
     }
   } else next.push('npm install openapi-cli-kit tsx', `Add "bin": {"${binary}": "${path.relative(options.cwd, path.join(codeDir, 'bin.mjs'))}"} to package.json`);
-  for (const r of item.requires) if (!onPath(r.command)) next.push(`${r.command} is not installed here: ${r.install}`);
+  for (const r of item.requires) {
+    const envBinary = r.envVar ? process.env[r.envVar] : undefined;
+    if (onPath(r.command) || (envBinary && isExecutable(envBinary)) || (r.macApp && macAppInstalled(r.macApp))) continue;
+    next.push(`${r.command} is not installed here: ${r.install}`);
+  }
   return { item: item.name, binary, files, ...(bin ? { bin } : {}), next };
 }

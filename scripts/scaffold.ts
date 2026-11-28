@@ -1,5 +1,5 @@
 // `npm run new-item -- <name> [flags]`: a new library item, by the scheme of CONTRIBUTING.md (`library/<name>/` with
-// item.ts, spec.ts, handlers.ts and SKILL.md, registered in library/index.ts, with tests/<name>.test.ts). With
+// item.ts, spec.ts, handlers.ts, SKILL.md and `test/handlers.test.ts`, registered in library/index.ts). With
 // --mcp-command or --mcp-url it is made from an MCP server: its tools listed and turned into commands.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -130,10 +130,10 @@ ${lines.join('\n')}
 ${def.examples.join('\n')}
 \`\`\`
 `;
-    files[`../../tests/${name}.test.ts`] = `import { describe, it, expect } from 'vitest';
-import { buildSpec, runCli, type Io, type McpClient } from '../src/index.ts';
-import { mcpHandlers } from '../src/mcp.ts';
-import { COMMANDS, REQUIRED, SERVER, cli } from '../library/${name}/spec.ts';
+    files['test/handlers.test.ts'] = `import { describe, it, expect } from 'vitest';
+import { buildSpec, runCli, type Io, type McpClient } from '../../../src/index.ts';
+import { mcpHandlers } from '../../../src/mcp.ts';
+import { COMMANDS, REQUIRED, SERVER, cli } from '../spec.ts';
 
 const spec = buildSpec(cli);
 
@@ -233,10 +233,10 @@ TODO: one paragraph: what it wraps, what it reads and writes. The commands are l
 ${binary} version --json
 \`\`\`
 `;
-    files[`../../tests/${name}.test.ts`] = `import { describe, it, expect } from 'vitest';
-import { buildSpec, runCli, type Io } from '../src/index.ts';
-import { ${camel(name)}Handlers, type ToolRun } from '../library/${name}/handlers.ts';
-import { cli } from '../library/${name}/spec.ts';
+    files['test/handlers.test.ts'] = `import { describe, it, expect } from 'vitest';
+import { buildSpec, runCli, type Io } from '../../../src/index.ts';
+import { ${camel(name)}Handlers, type ToolRun } from '../handlers.ts';
+import { cli } from '../spec.ts';
 
 const spec = buildSpec(cli);
 

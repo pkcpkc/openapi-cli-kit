@@ -13,7 +13,7 @@ variables or headers it needs. If the server is unclear, ask before you run anyt
    - CONTRIBUTING.md ("Adding a library item").
    - `src/mcp.ts`, which explains how tools become commands: one kebab-case command per tool, a flag per input
      property, `--input` and stdin for the whole object, `get` for read-only tools.
-   - `library/magick/SKILL.md`, as the standard for a skill.
+   - `library/imagemagick/SKILL.md`, as the standard for a skill.
 2. **Check the server before starting it.** A stdio command runs on this machine. Tell the user what will run and
    confirm, unless they gave the exact command themselves.
 3. **Generate the item:**
@@ -23,7 +23,7 @@ variables or headers it needs. If the server is unclear, ask before you run anyt
    Secrets go in only as `${env:NAME}` references, never as values. The script connects, lists the tools, and writes:
    - `library/<name>/spec.ts`: `SERVER`, `COMMANDS`, `REQUIRED` and the `CliDef`;
    - `handlers.ts`: `mcpHandlers()`;
-   - `SKILL.md`, `item.ts` and `tests/<name>.test.ts`.
+   - `SKILL.md`, `item.ts` and `test/handlers.test.ts` inside `library/<name>/`.
 
    It also registers the item. If it fails, report the server's error and stop.
 4. **Review what it made**, in `spec.ts` and `item.ts`:

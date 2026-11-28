@@ -15,8 +15,8 @@ listed in [references/commands.md](references/commands.md).
 
 ```bash
 ocli list
-ocli add magick
-ocli add magick --as img --dir tools --skills-dir .claude/skills
+ocli add imagemagick
+ocli add imagemagick --as img --dir tools --skills-dir .claude/skills
 ```
 
 `add` writes:

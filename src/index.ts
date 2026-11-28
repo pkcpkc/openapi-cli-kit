@@ -24,7 +24,17 @@ export {
   type Parameter,
   type ResponseObject,
 } from './runner/spec.ts';
-export { STANDARD_RESPONSES, STANDARD_SCHEMAS, buildSpec, type ArgDef, type CliDef, type FlagDef, type OpDef, type StandardResponse } from './dsl.ts';
+export {
+  STANDARD_RESPONSES,
+  STANDARD_SCHEMAS,
+  buildSpec,
+  type ArgDef,
+  type CliDef,
+  type CliProfileDef,
+  type FlagDef,
+  type OpDef,
+  type StandardResponse,
+} from './dsl.ts';
 export { referenceText } from './reference.ts';
 export { cliProblems, skillCalls, specText, writeCli, type CliEntry } from './project.ts';
 export { processIo, readStdin, runProcess } from './process.ts';

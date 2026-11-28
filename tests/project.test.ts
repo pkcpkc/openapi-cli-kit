@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSpec, cliProblems, skillCalls, writeCli, type CliDef, type CliEntry } from '../src/index.ts';
+import { buildSpec, cliProblems, lintSpec, skillCalls, writeCli, type CliDef, type CliEntry } from '../src/index.ts';
 import { tempDir } from './helpers.ts';
 
 const def: CliDef = {
@@ -31,6 +31,49 @@ describe('a project CLI', () => {
     expect(spec.components?.responses?.Usage?.description).toMatch(/^Usage error/);
     expect(spec.components?.schemas?.Task).toEqual(def.schemas.Task);
     expect(spec.paths['/item/run/{id}'].post?.responses).toHaveProperty('202');
+  });
+
+  it('builds a focused profile with only its operations and referenced schemas', () => {
+    const profiled: CliDef = {
+      ...def,
+      profiles: {
+        read: {
+          summary: 'Read one item',
+          description: 'A focused read-only contract.',
+          examples: ['tool item get a1 --json'],
+          operationIds: ['get'],
+        },
+      },
+    };
+    const spec = buildSpec(profiled, 'read');
+    expect(Object.keys(spec.paths)).toEqual(['/item/get/{id}']);
+    expect(spec.info.title).toBe('tool (read)');
+    expect(Object.keys(spec.components?.schemas ?? {}).sort()).toEqual(['Error', 'Task']);
+    expect(lintSpec(spec)).toEqual([]);
+  });
+
+  it('writes focused profile schemas and references alongside the full CLI', () => {
+    const dir = tempDir();
+    fs.mkdirSync(path.join(dir, 'skill'));
+    fs.writeFileSync(path.join(dir, 'skill', 'SKILL.md'), SKILL);
+    const profiled: CliDef = {
+      ...def,
+      profiles: {
+        read: {
+          summary: 'Read one item',
+          description: 'A focused read-only contract.',
+          examples: ['tool item get a1 --json'],
+          operationIds: ['get'],
+        },
+      },
+    };
+    const profiledEntry = entry(dir, profiled);
+    const written = writeCli(profiledEntry).map((file) => path.relative(dir, file));
+    expect(written).toContain(path.join('tool.read.openapi.json'));
+    expect(written).toContain(path.join('skill', 'references', 'profiles.md'));
+    expect(written).toContain(path.join('skill', 'references', 'profiles', 'read.openapi.json'));
+    expect(written).toContain(path.join('skill', 'references', 'profiles', 'read.commands.md'));
+    expect(cliProblems(profiledEntry)).toEqual([]);
   });
 
   it('is in step once written, with a skill whose examples parse', () => {

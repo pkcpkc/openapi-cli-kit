@@ -3,15 +3,16 @@ import type { CliDef } from '../dsl.ts';
 /** `ocli`: the kit's own command, itself a CLI of this kind (`specs/ocli.openapi.json`). */
 export const toolCli: CliDef = {
   binary: 'ocli',
-  version: '0.1.0',
+  version: '0.2.0',
   summary: 'Add ready-made CLIs from the library to a project, and check CLI documents.',
   description: `The library holds ready-made CLIs, each an OpenAPI 3.1 document with x-cli-* extensions, its handlers and an
-agent skill. add copies one into your project: you own the code and may change it. lint checks a CLI document against
-the conventions (SPEC.md) and the extension schema; reference writes the command reference of a skill from one.`,
+  agent skill. add copies one into your project: you own the code and may change it. Items can also generate focused
+  OpenAPI profiles and references from the same command definition. lint checks a CLI document against the conventions
+  (SPEC.md) and the extension schema; reference writes the command reference of a skill from one.`,
   examples: [
     'ocli list',
-    'ocli add magick',
-    'ocli add magick --as img --dir tools --skills-dir .claude/skills --json',
+    'ocli add imagemagick',
+    'ocli add imagemagick --as img --dir tools --skills-dir .claude/skills --json',
     'ocli lint cli/img/img.openapi.json',
     'ocli reference cli/img/img.openapi.json > .agents/skills/img/references/commands.md',
   ],
@@ -51,9 +52,10 @@ the conventions (SPEC.md) and the extension schema; reference writes the command
       cmd: 'add',
       method: 'post',
       summary: 'Copy a library CLI into this project: its code, its spec, a launcher and its skill',
-      description: `Writes <dir>/<binary>/ (the source files, <binary>.openapi.json and bin.mjs) and <skills-dir>/<binary>/ (SKILL.md and
-references/commands.md), and adds the launcher to package.json bin. The code imports openapi-cli-kit, and the launcher
-runs TypeScript with tsx: install both. Refused (exit 3) when something is there already, unless --force.`,
+      description: `Writes <dir>/<binary>/ (the source files, full <binary>.openapi.json, any focused profile schemas and bin.mjs)
+and <skills-dir>/<binary>/ (SKILL.md, references/commands.md and profile references), and adds the launcher to package.json bin.
+Profiles are scoped OpenAPI views, not separate binaries; load only the profile needed for an agent task. The code imports
+openapi-cli-kit, and the launcher runs TypeScript with tsx: install both. Refused (exit 3) when something is there already, unless --force.`,
       args: [{ name: 'item', description: 'The library item (ocli list)' }],
       flags: [
         { name: '--as', description: 'Another binary name for it (every mention renamed)', schema: { type: 'string', pattern: '^[a-z][a-z0-9-]*$' } },

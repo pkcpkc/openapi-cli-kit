@@ -9,10 +9,10 @@ Use the first word of the arguments as the item's name (lowercase, dashes). The 
 or purpose is given, ask for them before writing anything.
 
 1. **Read the scheme first.** Read CONTRIBUTING.md ("Adding a library item"), then SPEC.md sections 2–4. Read
-   `library/magick/` (`item.ts`, `spec.ts`, `handlers.ts`, `SKILL.md`) and `tests/magick.test.ts` as the model to
+   `library/imagemagick/` (`item.ts`, `spec.ts`, `handlers.ts`, `SKILL.md`) and `library/imagemagick/test/handlers.test.ts` as the model to
    follow.
 2. **Scaffold it** with `npm run new-item -- <name> --summary "<one line>"`. This writes `library/<name>/`
-   (`item.ts`, `spec.ts`, `handlers.ts`, `SKILL.md`), `tests/<name>.test.ts`, and registers the item in
+   (`item.ts`, `spec.ts`, `handlers.ts`, `SKILL.md`, and `test/handlers.test.ts`) and registers the item in
    `library/index.ts`. Add `--binary <binary>` if `<name>-cli` doesn't fit.
 3. **Design the commands** before you code them. Present a short list (command, `get` or `post`, arguments, flags,
    result) and wait for the user's go-ahead.
@@ -20,7 +20,7 @@ or purpose is given, ask for them before writing anything.
      `format: path`). Pixel or unit conventions go in the descriptions.
    - Every flag of the wrapped tool doesn't need a command. Cover what agents need, and leave the rest to the tool
      itself.
-4. **Write `spec.ts`** with the DSL. Use a `writes()`-style helper for commands that write `--out`, as `magick` does.
+4. **Write `spec.ts`** with the DSL. Use a `writes()`-style helper for commands that write `--out`, as `imagemagick` does.
    Examples must call real commands.
 5. **Write `handlers.ts`.**
    - Import only from `openapi-cli-kit` and Node built-ins.
@@ -36,7 +36,8 @@ or purpose is given, ask for them before writing anything.
    - what each command does, with its conventions;
    - the rules (`--json`, exit codes);
    - recipes in `bash` blocks that parse.
-8. **Write the tests** in `tests/<name>.test.ts`. Check the argument lists through a fake runner, and the error
+8. **Write the tests** in `library/<name>/test/<source-file>.test.ts`, one focused test file per source file. Check
+   the argument lists through a fake runner, and the error
    mapping. Add real checks under `describe.skipIf(!hasTool)`.
 9. **Update the docs:** add a row to README.md's library table and a line to CHANGELOG.md.
 10. **Run `npm run check`** until it passes. Then try the item for real: add it to a scratch folder with

@@ -6,5 +6,5 @@ export default defineConfig({
     // The library's items import the kit by its package name, as they do once added to a project
     alias: { 'openapi-cli-kit': fileURLToPath(new URL('./src/index.ts', import.meta.url)) },
   },
-  test: { include: ['tests/**/*.test.ts'] },
+  test: { include: ['**/*.test.ts'], exclude: ['node_modules/**', 'dist/**'] },
 });

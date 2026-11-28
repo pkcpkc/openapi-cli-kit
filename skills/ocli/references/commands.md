@@ -16,9 +16,10 @@ Exit codes: 0, 1, 4. Prints: The library items.
 
 Copy a library CLI into this project: its code, its spec, a launcher and its skill
 
-Writes <dir>/<binary>/ (the source files, <binary>.openapi.json and bin.mjs) and <skills-dir>/<binary>/ (SKILL.md and
-references/commands.md), and adds the launcher to package.json bin. The code imports openapi-cli-kit, and the launcher
-runs TypeScript with tsx: install both. Refused (exit 3) when something is there already, unless --force.
+Writes <dir>/<binary>/ (the source files, full <binary>.openapi.json, any focused profile schemas and bin.mjs)
+and <skills-dir>/<binary>/ (SKILL.md, references/commands.md and profile references), and adds the launcher to package.json bin.
+Profiles are scoped OpenAPI views, not separate binaries; load only the profile needed for an agent task. The code imports
+openapi-cli-kit, and the launcher runs TypeScript with tsx: install both. Refused (exit 3) when something is there already, unless --force.
 
 | Argument | Type | Meaning |
 | --- | --- | --- |

@@ -1,8 +1,8 @@
 import type { LibraryItem } from '../../src/library.ts';
 import { cli } from './spec.ts';
 
-export const magick: LibraryItem = {
-  name: 'magick',
+export const imagemagick: LibraryItem = {
+  name: 'imagemagick',
   binary: cli.binary,
   summary: 'ImageMagick 7 as typed commands: info, resize, crop, trim, pad, convert, overlay, grid, adjust, effect, transparent, compare',
   def: cli,

@@ -25,15 +25,15 @@ describe('ocli', () => {
   it('lists the library', async () => {
     const { code, json } = await tool(['list', '--json']);
     expect(code).toBe(0);
-    expect(json()).toContainEqual(expect.objectContaining({ name: 'magick', binary: 'magick-cli', requires: ['magick'] }));
+    expect(json()).toContainEqual(expect.objectContaining({ name: 'imagemagick', binary: 'magick-cli', requires: ['magick'] }));
   });
 
   it('adds an item: its code, spec, launcher and skill, and the launcher to package.json bin', async () => {
     const dir = project();
-    const { code, json } = await tool(['add', 'magick', '--json'], dir);
+    const { code, json } = await tool(['add', 'imagemagick', '--json'], dir);
     expect(code).toBe(0);
     const added = json();
-    expect(added).toMatchObject({ item: 'magick', binary: 'magick-cli', bin: 'cli/magick-cli/bin.mjs' });
+    expect(added).toMatchObject({ item: 'imagemagick', binary: 'magick-cli', bin: 'cli/magick-cli/bin.mjs' });
     for (const file of ['cli/magick-cli/spec.ts', 'cli/magick-cli/handlers.ts', 'cli/magick-cli/magick-cli.openapi.json', 'cli/magick-cli/bin.mjs', '.agents/skills/magick-cli/SKILL.md', '.agents/skills/magick-cli/references/commands.md']) {
       expect(added.files).toContain(path.join(dir, file));
     }
@@ -44,7 +44,7 @@ describe('ocli', () => {
 
   it('renames every mention of the binary with --as, into the folders given', async () => {
     const dir = project({ name: 'demo' });
-    const { json } = await tool(['add', 'magick', '--as', 'img', '-d', 'tools', '--skills-dir', '.claude/skills', '--no-package', '--json'], dir);
+    const { json } = await tool(['add', 'imagemagick', '--as', 'img', '-d', 'tools', '--skills-dir', '.claude/skills', '--no-package', '--json'], dir);
     expect(json().next).toContain('npm install openapi-cli-kit tsx');
     const texts = ['tools/img/spec.ts', 'tools/img/handlers.ts', 'tools/img/img.openapi.json', 'tools/img/bin.mjs', '.claude/skills/img/SKILL.md', '.claude/skills/img/references/commands.md'].map((f) => fs.readFileSync(path.join(dir, f), 'utf8'));
     for (const text of texts) expect(text).not.toMatch(/magick-cli/);
@@ -55,12 +55,12 @@ describe('ocli', () => {
 
   it('refuses to overwrite without --force, an unknown item and a bad name', async () => {
     const dir = project();
-    await tool(['add', 'magick'], dir);
-    const again = await tool(['add', 'magick'], dir);
+    await tool(['add', 'imagemagick'], dir);
+    const again = await tool(['add', 'imagemagick'], dir);
     expect([again.code, again.err]).toEqual([3, expect.stringMatching(/--force/)]);
-    expect((await tool(['add', 'magick', '--force'], dir)).code).toBe(0);
+    expect((await tool(['add', 'imagemagick', '--force'], dir)).code).toBe(0);
     expect((await tool(['add', 'nope'], dir)).code).toBe(2);
-    expect((await tool(['add', 'magick', '--as', 'Bad_Name'], dir)).code).toBe(1);
+    expect((await tool(['add', 'imagemagick', '--as', 'Bad_Name'], dir)).code).toBe(1);
   });
 
   it('lints a document: fine, or each problem (exit 1)', async () => {

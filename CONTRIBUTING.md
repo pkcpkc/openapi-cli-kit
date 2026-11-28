@@ -12,6 +12,8 @@ npm run specs        # after changing src/tool/spec.ts: writes specs/ and skills
 
 Tests use [Vitest](https://vitest.dev). Tests that need an external tool, such as ImageMagick, are skipped where the
 tool is not installed. Mock it in the other tests: each item's handlers take an injectable runner.
+The optional `npm run check:gimp-python` compiles GIMP's shipped Python helper module with the local `python3`;
+this checks Python syntax, while the live GIMP tests verify compatibility with GIMP's embedded APIs.
 
 ## Adding a library item
 
@@ -33,8 +35,13 @@ An item is a folder `library/<name>/`:
 | `SKILL.md` | The agent skill: frontmatter `name: <binary>` and a description of what it does and when to use it, then the rules and recipes in `bash` blocks |
 | `item.ts` | The manifest: `name`, `binary`, `summary`, `def`, `files` (the sources to copy) and `requires` (tools on the machine) |
 
-Register it in [library/index.ts](library/index.ts) and add `tests/<name>.test.ts`. `tests/library.test.ts` then
-checks, for every item:
+Use `CliDef.profiles` when agents should load only a focused subset of operations. Profiles select operation IDs from
+the same definition; `ocli add` emits the full runtime schema plus profile-specific OpenAPI documents and references
+under the skill's `references/profiles/` folder. Load only the profile needed for a task.
+
+Register it in [library/index.ts](library/index.ts) and add item-specific tests under
+`library/<name>/test/<source-file>.test.ts` (for example, `handlers.test.ts`). Keep one focused test file per source file,
+with shared helpers in the same `test/` folder when useful. `tests/library.test.ts` then checks, for every item:
 
 - that it lints clean;
 - that it installs (renamed too);

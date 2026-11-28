@@ -47,6 +47,14 @@ export interface OpDef {
   missing?: boolean;
 }
 
+export interface CliProfileDef {
+  summary: string;
+  description: string;
+  examples: string[];
+  /** Operation IDs from the full CLI definition that belong in this focused contract. */
+  operationIds: string[];
+}
+
 /** The standard outcomes a CLI shares (`STANDARD_RESPONSES`), by name. */
 export type StandardResponse = 'Accepted' | 'Usage' | 'NotFound' | 'Conflict' | 'Unavailable' | 'Failed' | 'Timeout';
 
@@ -59,6 +67,8 @@ export interface CliDef {
   examples: string[];
   /** Component schemas; one named like a standard one (`Error`, `Task`, `Queued`) replaces it. */
   schemas: Record<string, JsonSchema>;
+  /** Optional focused OpenAPI views, generated from the same operations as the full CLI. */
+  profiles?: Record<string, CliProfileDef>;
   /** The standard outcomes in this CLI's words (what is not running, how to wait for queued tasks). */
   responses?: Partial<Record<StandardResponse, string>>;
   ops: OpDef[];
@@ -160,22 +170,83 @@ function operation(op: OpDef): { path: string; operation: Operation } {
   };
 }
 
-/** The OpenAPI 3.1 document of a CLI. */
-export function buildSpec(def: CliDef): CliSpec {
+function referencedComponents(value: unknown): Set<string> {
+  const refs = new Set<string>();
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+    } else if (node && typeof node === 'object') {
+      for (const [key, child] of Object.entries(node)) {
+        if (key === '$ref' && typeof child === 'string' && child.startsWith('#/components/')) refs.add(child);
+        else visit(child);
+      }
+    }
+  };
+  visit(value);
+  return refs;
+}
+
+function profileComponents(paths: CliSpec['paths'], schemas: Record<string, JsonSchema>, responses: Record<string, ResponseObject>) {
+  const pending = [...referencedComponents(paths)];
+  const includedSchemas: Record<string, JsonSchema> = {};
+  const includedResponses: Record<string, ResponseObject> = {};
+
+  while (pending.length) {
+    const ref = pending.pop()!;
+    const match = /^#\/components\/(schemas|responses)\/([^/]+)$/.exec(ref);
+    if (!match) continue;
+    const [, kind, name] = match;
+    if (kind === 'schemas' && schemas[name] && !includedSchemas[name]) {
+      includedSchemas[name] = schemas[name];
+      pending.push(...referencedComponents(schemas[name]));
+    } else if (kind === 'responses' && responses[name] && !includedResponses[name]) {
+      includedResponses[name] = responses[name];
+      pending.push(...referencedComponents(responses[name]));
+    }
+  }
+  return { schemas: includedSchemas, responses: includedResponses };
+}
+
+/** The OpenAPI 3.1 document of a CLI, or one focused profile of it. */
+export function buildSpec(def: CliDef, profileName?: string): CliSpec {
+  for (const [name, profile] of Object.entries(def.profiles ?? {})) {
+    if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`${def.binary}: invalid OpenAPI profile name ${name}`);
+    if (!profile.summary || !profile.description || !Array.isArray(profile.examples) || !profile.examples.length || !Array.isArray(profile.operationIds) || !profile.operationIds.length) {
+      throw new Error(`${def.binary}: OpenAPI profile ${name} needs a summary, description, examples, and operations`);
+    }
+    const missingIds = profile.operationIds.filter((id) => !def.ops.some((op) => op.id === id));
+    if (missingIds.length) throw new Error(`${def.binary}: OpenAPI profile ${name} names unknown operations: ${missingIds.join(', ')}`);
+    if (new Set(profile.operationIds).size !== profile.operationIds.length) {
+      throw new Error(`${def.binary}: OpenAPI profile ${name} lists an operation more than once`);
+    }
+  }
+  const profile = profileName === undefined ? undefined : def.profiles?.[profileName];
+  if (profileName !== undefined && !profile) throw new Error(`${def.binary}: unknown OpenAPI profile ${profileName}`);
+  const ops = profile ? def.ops.filter((op) => profile.operationIds.includes(op.id)) : def.ops;
+  if (profile && !ops.length) throw new Error(`${def.binary}: OpenAPI profile ${profileName} has no operations`);
+
   const paths: CliSpec['paths'] = {};
-  for (const op of def.ops) {
+  for (const op of ops) {
     const { path, operation: o } = operation(op);
     if (paths[path]?.[op.method]) throw new Error(`${def.binary}: two commands on ${op.method.toUpperCase()} ${path}`);
     paths[path] = { ...paths[path], [op.method]: o };
   }
+  const allResponses = Object.fromEntries(Object.entries(STANDARD_RESPONSES).map(([name, response]) => [
+    name,
+    { ...response, description: def.responses?.[name as StandardResponse] ?? response.description },
+  ]));
+  const allSchemas = { ...STANDARD_SCHEMAS, ...def.schemas };
+  const components = profile ? profileComponents(paths, allSchemas, allResponses) : { schemas: allSchemas, responses: allResponses };
   return {
     openapi: '3.1.0',
-    info: { title: def.binary, version: def.version, summary: def.summary, description: def.description },
-    'x-cli': { binary: def.binary, ...(def.minVersion ? { min_version: def.minVersion } : {}), examples: def.examples },
-    paths,
-    components: {
-      schemas: { ...STANDARD_SCHEMAS, ...def.schemas },
-      responses: Object.fromEntries(Object.entries(STANDARD_RESPONSES).map(([name, r]) => [name, { ...r, description: def.responses?.[name as StandardResponse] ?? r.description }])),
+    info: {
+      title: profileName !== undefined ? `${def.binary} (${profileName})` : def.binary,
+      version: def.version,
+      summary: profile?.summary ?? def.summary,
+      description: profile?.description ?? def.description,
     },
+    'x-cli': { binary: def.binary, ...(def.minVersion ? { min_version: def.minVersion } : {}), examples: profile?.examples ?? def.examples },
+    paths,
+    components,
   };
 }

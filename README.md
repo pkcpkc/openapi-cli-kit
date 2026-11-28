@@ -18,7 +18,7 @@ ready-made CLIs. `ocli add` copies one into your project, with its skill.
 
 - [SPEC.md](SPEC.md): the specification (the `x-cli-*` extensions and the conventions).
 - [schema/openapi-cli-extensions.schema.json](schema/openapi-cli-extensions.schema.json): the extensions' JSON Schema.
-- [library/](library/): the ready-made CLIs. The first is `magick`, a typed wrapper around ImageMagick 7.
+- [library/](library/): the ready-made CLIs, including `imagemagick` for ImageMagick 7 and `gimp` for GIMP 3 image workflows, scripts and its local PDB.
 
 ## Why
 
@@ -35,7 +35,7 @@ ready-made CLIs. `ocli add` copies one into your project, with its skill.
 ```bash
 npm install openapi-cli-kit tsx
 npx ocli list
-npx ocli add magick                 # or: --as img --dir tools --skills-dir .claude/skills
+npx ocli add imagemagick            # or: --as img --dir tools --skills-dir .claude/skills
 npm link                                   # puts magick-cli on the PATH
 magick-cli trim scan.png --fuzz 5 -o tight.png --json
 ```
@@ -58,7 +58,8 @@ The copy is yours, as with code generators: change it freely, and keep it in ste
 
 | Item | Binary | What | Needs |
 | --- | --- | --- | --- |
-| `magick` | `magick-cli` | `info`, `resize`, `crop`, `trim`, `pad`, `convert`, `overlay`, `grid`, `adjust`, `effect`, `transparent`, `compare` on image files | ImageMagick 7 (`magick`, or `MAGICK_BINARY`) |
+| `imagemagick` | `magick-cli` | `info`, `resize`, `crop`, `trim`, `pad`, `convert`, `overlay`, `grid`, `adjust`, `effect`, `transparent`, `compare` on image files | ImageMagick 7 (`magick`, or `MAGICK_BINARY`) |
+| `gimp` | `gimp-cli` | Common-format import/export, image edits, nested groups/layers, masks, layer bundles, custom scripts, PDB discovery and focused OpenAPI profiles | GIMP 3 (`gimp`, macOS GIMP.app, or `GIMP_BINARY`) |
 
 ### From an MCP server
 
@@ -140,14 +141,19 @@ The DSL fills in the conventions of SPEC.md:
 A CLI can word the standard outcomes its own way (`responses`), and replace the shared `Task` or `Error` schema
 (`schemas`).
 
+For a CLI with many commands, `profiles` can define focused OpenAPI views by operation ID. Each profile has a
+`summary`, `description`, `examples`, and `operationIds`. The full spec stays the runtime contract; `writeCli` and
+`ocli add` also write smaller profile specs and references, so an agent can load only the image, layer, or scripting
+commands relevant to its task.
+
 ### The API
 
 | Export | What |
 | --- | --- |
-| `buildSpec(def)`, `specText(def)` | The OpenAPI document of a definition, as an object or as written |
+| `buildSpec(def, profile?)`, `specText(def, profile?)` | The full OpenAPI document or a focused profile, as an object or as written |
 | `runCli(spec, handlers, argv, io)` | Runs a command, with injectable I/O (for tests); returns the exit code |
 | `runProcess(specFile, handlers)` | Runs the process's arguments (for a launcher) |
-| `writeCli(entry)`, `cliProblems(entry)` | Writes a CLI's spec and its skill's reference; lists what is out of step |
+| `writeCli(entry)`, `cliProblems(entry)` | Writes a CLI's full and focused specs and skill references; lists what is out of step |
 | `lintSpec(spec)` | The document's problems, by SPEC.md and the extension schema |
 | `referenceText(spec)` | The commands as markdown |
 | `CliError(status, message, hint)` | A failure, by the status that maps to its exit code |

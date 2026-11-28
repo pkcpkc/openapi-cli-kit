@@ -1,44 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { magickHandlers, magickRunner, type MagickRun } from '../library/magick/handlers.ts';
-import { cli } from '../library/magick/spec.ts';
-import { CliError, buildSpec, runCli, type Handlers, type Io } from '../src/index.ts';
-
-const spec = buildSpec(cli);
-const tempDir = async () => fs.mkdtempSync(path.join(os.tmpdir(), 'magick-cli-'));
-
-async function run(handlers: Handlers, argv: string[]) {
-  const sink = { out: '', err: '' };
-  const io: Io = { stdout: (t) => void (sink.out += t), stderr: (t) => void (sink.err += t), readStdin: async () => null, cwd: process.cwd(), env: {} };
-  const code = await runCli(spec, handlers, argv, io);
-  return { code, ...sink, json: () => JSON.parse(sink.out) };
-}
-
-/** A fake ImageMagick: records each call, answers identify with a 40x30 PNG, and anything else from `answer`. */
-function fakeMagick(answer: (args: string[]) => { code?: number; stdout?: string; stderr?: string } = () => ({})) {
-  const calls: string[][] = [];
-  const magick: MagickRun = async (args) => {
-    calls.push(args);
-    if (args[0] === 'identify') return { code: 0, stdout: '40|30|PNG|sRGB|srgba 5.0|8\n', stderr: '' };
-    const result = { code: 0, stdout: '', stderr: '', ...answer(args) };
-    // Like ImageMagick, it writes the file named last
-    if (!result.code && !args.includes('info:') && args[0] !== 'compare') fs.writeFileSync(args[args.length - 1], 'png');
-    return result;
-  };
-  return { magick, calls, written: () => calls.filter((c) => c[0] !== 'identify') };
-}
-
-/** A temp folder with a (placeholder) image in it. */
-async function withImage(name = 'in.png') {
-  const dir = await tempDir();
-  fs.writeFileSync(path.join(dir, name), 'png');
-  return { dir, file: path.join(dir, name) };
-}
+import { magickHandlers, magickRunner } from '../handlers.ts';
+import { cli } from '../spec.ts';
+import { CliError } from '../../../src/index.ts';
+import { alphaAt, channelAt, fakeMagick, hasMagick, outputInfo, picture, run, solidImage, tempDir, withImage } from './support.ts';
 
 describe('magick-cli (the magick calls)', () => {
+  it('composes exactly one handler per CLI operation', () => {
+    const handlers = magickHandlers(async () => ({ code: 0, stdout: '', stderr: '' }));
+    expect(new Set(Object.keys(handlers))).toEqual(new Set(cli.ops.map((op) => op.id)));
+  });
+
   it('reads an image: size, format, alpha and frames', async () => {
     const { file } = await withImage();
     const { magick } = fakeMagick();
@@ -184,34 +157,131 @@ describe('magick-cli (the magick calls)', () => {
   });
 });
 
-/** Whether ImageMagick 7 runs here (the real-pixel checks are skipped without it). */
-const hasMagick = (() => {
-  try {
-    execFileSync('magick', ['-version'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-})();
-
 describe.skipIf(!hasMagick)('magick-cli (with ImageMagick)', () => {
-  /** Writes a white 8x6 PNG with a red 2x2 square at 3,2. */
-  const picture = (file: string) => execFileSync('magick', ['-size', '8x6', 'xc:white', '-fill', 'red', '-draw', 'rectangle 3,2 4,3', file]);
-  /** The alpha (0-1) of a pixel. */
-  const alphaAt = (file: string, x: number, y: number) => Number(execFileSync('magick', [file, '-format', `%[fx:p{${x},${y}}.a]`, 'info:']).toString());
-
-  it('trims to the red square, clears the white background, and compares', async () => {
+  it('reads image info', async () => {
     const dir = await tempDir();
     const file = path.join(dir, 'in.png');
     picture(file);
     const handlers = magickHandlers();
-    const trimmed = await run(handlers, ['trim', file, '-o', path.join(dir, 't.png'), '--json']);
-    expect(trimmed.json()).toMatchObject({ width: 2, height: 2, box: { x: 3, y: 2, width: 2, height: 2 } });
+    expect(await outputInfo(handlers, file)).toMatchObject({ width: 8, height: 6, format: 'PNG', alpha: false });
+  });
 
-    await run(handlers, ['transparent', file, '--at', '0,0', '-o', path.join(dir, 'clear.png')]);
-    expect([alphaAt(path.join(dir, 'clear.png'), 0, 0), alphaAt(path.join(dir, 'clear.png'), 3, 2)]).toEqual([0, 1]);
+  it('resizes to the requested dimensions', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'resized.png');
+    picture(file);
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['resize', file, '--size', '4x4', '--fit', 'stretch', '-o', out])).code).toBe(0);
+    expect(await outputInfo(handlers, out)).toMatchObject({ width: 4, height: 4 });
+  });
 
-    expect((await run(handlers, ['compare', file, file, '--json'])).json()).toMatchObject({ rmse: 0, same: true });
-    expect((await run(handlers, ['compare', file, path.join(dir, 't.png')])).code).toBe(1);
+  it('crops the requested pixels', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'crop.png');
+    picture(file);
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['crop', file, '--rect', '3,2,2,2', '-o', out])).code).toBe(0);
+    expect(await outputInfo(handlers, out)).toMatchObject({ width: 2, height: 2 });
+    expect(channelAt(out, 0, 0, 'r')).toBe(1);
+    expect(channelAt(out, 0, 0, 'g')).toBe(0);
+  });
+
+  it('trims to the red square and reports its source box', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'trimmed.png');
+    picture(file);
+    const result = await run(magickHandlers(), ['trim', file, '-o', out, '--json']);
+    expect(result.code).toBe(0);
+    expect(result.json()).toMatchObject({ width: 2, height: 2, box: { x: 3, y: 2, width: 2, height: 2 } });
+  });
+
+  it('pads the image with the requested border', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'padded.png');
+    picture(file);
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['pad', file, '--margin', '1', '--background', 'black', '-o', out])).code).toBe(0);
+    expect(await outputInfo(handlers, out)).toMatchObject({ width: 10, height: 8 });
+    expect(channelAt(out, 0, 0, 'r')).toBe(0);
+  });
+
+  it('converts to the format named by the output extension', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'converted.jpg');
+    picture(file);
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['convert', file, '-o', out])).code).toBe(0);
+    expect(await outputInfo(handlers, out)).toMatchObject({ width: 8, height: 6, format: 'JPEG' });
+  });
+
+  it('composites an overlay at the requested offset', async () => {
+    const dir = await tempDir();
+    const base = path.join(dir, 'base.png');
+    const overlay = path.join(dir, 'overlay.png');
+    const out = path.join(dir, 'composed.png');
+    picture(base);
+    solidImage(overlay, 'blue', '2x2');
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['overlay', base, overlay, '--at', '1,1', '-o', out])).code).toBe(0);
+    expect(channelAt(out, 1, 1, 'b')).toBe(1);
+    expect(channelAt(out, 0, 0, 'r')).toBe(1);
+  });
+
+  it('lays images out in the requested grid', async () => {
+    const dir = await tempDir();
+    const red = path.join(dir, 'red.png');
+    const blue = path.join(dir, 'blue.png');
+    const out = path.join(dir, 'grid.png');
+    solidImage(red, 'red', '8x6');
+    solidImage(blue, 'blue', '8x6');
+    const result = await run(magickHandlers(), ['grid', '-i', red, '-i', blue, '--columns', '2', '-o', out, '--json']);
+    expect(result.code).toBe(0);
+    expect(result.json()).toMatchObject({ columns: 2, rows: 1 });
+    expect(channelAt(out, 0, 0, 'r')).toBe(1);
+    expect(channelAt(out, 8, 0, 'b')).toBe(1);
+  });
+
+  it('adjusts an image to grayscale', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'gray.png');
+    picture(file);
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['adjust', file, '--grayscale', '-o', out])).code).toBe(0);
+    expect(await outputInfo(handlers, out)).toMatchObject({ colorspace: 'Gray' });
+  });
+
+  it('applies an effect to the image pixels', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'blurred.png');
+    picture(file);
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['effect', file, '--blur', '1', '-o', out])).code).toBe(0);
+    expect(channelAt(out, 2, 2, 'g')).toBeLessThan(1);
+  });
+
+  it('clears only the background connected to the selected point', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    const out = path.join(dir, 'clear.png');
+    picture(file);
+    const handlers = magickHandlers();
+    expect((await run(handlers, ['transparent', file, '--at', '0,0', '-o', out])).code).toBe(0);
+    expect([alphaAt(out, 0, 0), alphaAt(out, 3, 2)]).toEqual([0, 1]);
+  });
+
+  it('compares identical images', async () => {
+    const dir = await tempDir();
+    const file = path.join(dir, 'in.png');
+    picture(file);
+    const result = await run(magickHandlers(), ['compare', file, file, '--json']);
+    expect(result.code).toBe(0);
+    expect(result.json()).toMatchObject({ rmse: 0, same: true });
   });
 });

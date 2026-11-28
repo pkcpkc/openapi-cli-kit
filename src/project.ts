@@ -7,24 +7,60 @@ import { commands, findCommand, loadSpec, type CliSpec } from './runner/spec.ts'
 import { buildSpec, type CliDef } from './dsl.ts';
 import { referenceText } from './reference.ts';
 
-/** A CLI of a project: its definition, its handlers, where its OpenAPI document lives and its agent skill. */
+/** A CLI of a project: its definition, its handlers, where its OpenAPI documents live and its agent skill. */
 export interface CliEntry {
   def: CliDef;
   handlers: () => Handlers;
-  /** Where `<binary>.openapi.json` is written (by `writeCli`) and read (by its launcher). */
+  /** Where the full contract and focused `<binary>.<profile>.openapi.json` contracts are written. */
   specFile: string;
-  /** Its skill's folder: `SKILL.md` written by hand, `references/commands.md` written from the spec. */
+  /** Its skill's folder: `SKILL.md` written by hand, with full and focused generated command references. */
   skillDir?: string;
   /** How the reference names where it comes from (its do-not-edit note). Default: the spec's file name. */
   source?: string;
 }
 
 /** A spec as it is written: indented JSON. */
-export const specText = (def: CliDef): string => JSON.stringify(buildSpec(def), null, 2) + '\n';
+export const specText = (def: CliDef, profile?: string): string => JSON.stringify(buildSpec(def, profile), null, 2) + '\n';
 
 const referenceFile = (entry: CliEntry) => path.join(entry.skillDir!, 'references', 'commands.md');
+const profileSpecFile = (entry: CliEntry, name: string) => path.join(path.dirname(entry.specFile), `${entry.def.binary}.${name}.openapi.json`);
+const profileReferenceDir = (entry: CliEntry) => path.join(entry.skillDir!, 'references', 'profiles');
 
-/** Writes a CLI's spec and its skill's command reference; refuses (throws) a spec that does not lint clean. Returns the files. */
+export function profileIndexText(def: CliDef): string {
+  const rows = Object.entries(def.profiles ?? {}).map(
+    ([name, profile]) => `- [${name}](profiles/${name}.commands.md) — ${profile.summary}; [OpenAPI](profiles/${name}.openapi.json)`,
+  );
+  return `# ${def.binary} focused profiles
+
+Load only the profile relevant to the task to keep the agent-facing schema small. Each profile is generated from the
+same CLI definition; the full CLI remains available.
+
+${rows.join('\n')}
+`;
+}
+
+export interface ProfileArtifact {
+  name: string;
+  specFileName: string;
+  spec: string;
+  reference: string;
+}
+
+/** Generated files for every focused profile, ready to write beside a CLI and under its skill. */
+export function profileArtifacts(def: CliDef): ProfileArtifact[] {
+  return Object.keys(def.profiles ?? {}).map((name) => {
+    const specFileName = `${def.binary}.${name}.openapi.json`;
+    const profileSpec = buildSpec(def, name);
+    return {
+      name,
+      specFileName,
+      spec: specText(def, name),
+      reference: referenceText(profileSpec, specFileName),
+    };
+  });
+}
+
+/** Writes a CLI's full and focused specs and skill references; refuses any spec that does not lint clean. */
 export function writeCli(entry: CliEntry): string[] {
   const spec = buildSpec(entry.def);
   const problems = lintSpec(spec);
@@ -32,11 +68,34 @@ export function writeCli(entry: CliEntry): string[] {
   fs.mkdirSync(path.dirname(entry.specFile), { recursive: true });
   fs.writeFileSync(entry.specFile, specText(entry.def), 'utf8');
   const written = [entry.specFile];
+  for (const profile of profileArtifacts(entry.def)) {
+    const profileSpec = JSON.parse(profile.spec) as CliSpec;
+    const profileFile = profileSpecFile(entry, profile.name);
+    const profileProblems = lintSpec(profileSpec);
+    if (profileProblems.length) throw new Error(`${entry.def.binary} (${profile.name}):\n  ${profileProblems.join('\n  ')}`);
+    fs.writeFileSync(profileFile, profile.spec, 'utf8');
+    written.push(profileFile);
+    if (entry.skillDir) {
+      const directory = profileReferenceDir(entry);
+      fs.mkdirSync(directory, { recursive: true });
+      const profileSchema = path.join(directory, `${profile.name}.openapi.json`);
+      fs.writeFileSync(profileSchema, profile.spec, 'utf8');
+      written.push(profileSchema);
+      const profileReference = path.join(directory, `${profile.name}.commands.md`);
+      fs.writeFileSync(profileReference, profile.reference, 'utf8');
+      written.push(profileReference);
+    }
+  }
   if (entry.skillDir) {
     const file = referenceFile(entry);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, referenceText(spec, entry.source), 'utf8');
     written.push(file);
+    if (Object.keys(entry.def.profiles ?? {}).length) {
+      const index = path.join(entry.skillDir, 'references', 'profiles.md');
+      fs.writeFileSync(index, profileIndexText(entry.def), 'utf8');
+      written.push(index);
+    }
   }
   return written;
 }
@@ -53,8 +112,8 @@ export function skillCalls(markdown: string, binary: string): string[] {
 }
 
 /**
- * What is out of step in a CLI (none: all is well), for a project's tests: its spec not written as built or not linting
- * clean, a command without a handler or a handler without a command, its skill's frontmatter, its reference not as
+ * What is out of step in a CLI (none: all is well), for a project's tests: its specs not written as built or not linting
+ * clean, a command without a handler or a handler without a command, its skill's frontmatter, its references not as
  * generated, or a call in the skill's examples that the CLI would refuse.
  */
 export function cliProblems(entry: CliEntry): string[] {
@@ -65,6 +124,15 @@ export function cliProblems(entry: CliEntry): string[] {
   if (fs.readFileSync(entry.specFile, 'utf8') !== built) problems.push(`${entry.specFile} is not as built: write it again (writeCli)`);
   const spec = JSON.parse(built) as CliSpec;
   problems.push(...lintSpec(spec));
+  for (const name of Object.keys(entry.def.profiles ?? {})) {
+    const profileFile = profileSpecFile(entry, name);
+    const profile = buildSpec(entry.def, name);
+    const profileText = JSON.stringify(profile, null, 2) + '\n';
+    if (!fs.existsSync(profileFile) || fs.readFileSync(profileFile, 'utf8') !== profileText) {
+      problems.push(`${profileFile} is not as built: write it again (writeCli)`);
+    }
+    problems.push(...lintSpec(profile).map((problem) => `profile ${name}: ${problem}`));
+  }
   const ids = commands(spec).map((c) => c.op.operationId);
   const handlers = entry.handlers();
   problems.push(...ids.filter((id) => !handlers[id]).map((id) => `command ${id} has no handler`));
@@ -78,6 +146,24 @@ export function cliProblems(entry: CliEntry): string[] {
     if (!front?.[2] || front[2].length < 80) problems.push(`${skillFile}: its frontmatter needs a description (what it does and when to use it)`);
     const ref = referenceFile(entry);
     if (!fs.existsSync(ref) || fs.readFileSync(ref, 'utf8') !== referenceText(spec, entry.source)) problems.push(`${ref} is not as generated: write it again (writeCli)`);
+    for (const name of Object.keys(entry.def.profiles ?? {})) {
+      const profile = buildSpec(entry.def, name);
+      const profileFile = profileSpecFile(entry, name);
+      const profileRef = path.join(profileReferenceDir(entry), `${name}.commands.md`);
+      const profileSchema = path.join(profileReferenceDir(entry), `${name}.openapi.json`);
+      if (!fs.existsSync(profileSchema) || fs.readFileSync(profileSchema, 'utf8') !== specText(entry.def, name)) {
+        problems.push(`${profileSchema} is not as generated: write it again (writeCli)`);
+      }
+      if (!fs.existsSync(profileRef) || fs.readFileSync(profileRef, 'utf8') !== referenceText(profile, path.basename(profileFile))) {
+        problems.push(`${profileRef} is not as generated: write it again (writeCli)`);
+      }
+    }
+    if (Object.keys(entry.def.profiles ?? {}).length) {
+      const index = path.join(entry.skillDir, 'references', 'profiles.md');
+      if (!fs.existsSync(index) || fs.readFileSync(index, 'utf8') !== profileIndexText(entry.def)) {
+        problems.push(`${index} is not as generated: write it again (writeCli)`);
+      }
+    }
     for (const call of skillCalls(skill, binary)) {
       const found = findCommand(spec, words(call).slice(1));
       if (!found) problems.push(`${skillFile}: calls no command: ${call}`);

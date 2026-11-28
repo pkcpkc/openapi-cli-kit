@@ -72,7 +72,7 @@ export class McpClient {
     const init = await this.request('initialize', {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
-      clientInfo: { name: this.options.clientName ?? 'openapi-cli-kit', version: '0.1.0' },
+      clientInfo: { name: this.options.clientName ?? 'openapi-cli-kit', version: '0.2.0' },
     });
     this.serverInfo = init.serverInfo ?? null;
     this.instructions = init.instructions;

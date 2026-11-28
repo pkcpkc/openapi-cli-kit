@@ -30,10 +30,10 @@ describe('npm run new-item', () => {
   it('scaffolds an item by the scheme, registers it, and refuses to overwrite', async () => {
     const dir = root();
     const written = await scaffoldItem(dir, { name: 'ffmpeg-tools', summary: 'Clips with ffmpeg' });
-    expect(written.map((f) => path.relative(dir, f)).sort()).toEqual(['library/ffmpeg-tools/SKILL.md', 'library/ffmpeg-tools/handlers.ts', 'library/ffmpeg-tools/item.ts', 'library/ffmpeg-tools/spec.ts', 'library/index.ts', 'tests/ffmpeg-tools.test.ts']);
+    expect(written.map((f) => path.relative(dir, f)).sort()).toEqual(['library/ffmpeg-tools/SKILL.md', 'library/ffmpeg-tools/handlers.ts', 'library/ffmpeg-tools/item.ts', 'library/ffmpeg-tools/spec.ts', 'library/ffmpeg-tools/test/handlers.test.ts', 'library/index.ts']);
     const index = fs.readFileSync(path.join(dir, 'library', 'index.ts'), 'utf8');
     expect(index).toContain("import { ffmpegTools } from './ffmpeg-tools/item.ts';");
-    expect(index).toMatch(/ITEMS: LibraryItem\[\] = \[magick, (.+, )?ffmpegTools\]/);
+    expect(index).toMatch(/ITEMS: LibraryItem\[\] = \[imagemagick, (.+, )?ffmpegTools\]/);
     const { problems } = await check(dir, 'ffmpeg-tools', 'ffmpeg-tools-cli');
     expect(problems).toEqual([]);
     await expect(scaffoldItem(dir, { name: 'ffmpeg-tools' })).rejects.toThrow(/there already/);
